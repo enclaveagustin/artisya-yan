@@ -28,7 +28,6 @@ import {
   markUnfollowed,
   profileLink,
   removeFollowerFile,
-  sanitizeData,
   setDeactivated,
   setDeleted,
   setNewUsername,
@@ -114,20 +113,13 @@ function saveRecheckSettings(settings: RecheckSettings): void {
   }
 }
 
-function loadSaved(): AppData {
+// Earlier versions kept a copy of your lists in the browser and reopened with them. Nothing is kept any more: the page
+// starts empty and you add your files each time; the workbook you save is the only copy. This removes the old copy.
+function forgetOldCopy(): void {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw === null ? emptyData() : sanitizeData(JSON.parse(raw));
+    localStorage.removeItem(STORAGE_KEY);
   } catch {
-    return emptyData();
-  }
-}
-
-function persist(data: AppData): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // Storage full or blocked: the workbook you save is the real copy anyway.
+    // Storage blocked: nothing to remove.
   }
 }
 
@@ -263,7 +255,10 @@ const RowView = ({ row, tab, onChange }: RowViewProps) => {
 };
 
 const App = () => {
-  const [data, setData] = useState<AppData>(() => loadSaved());
+  const [data, setData] = useState<AppData>(() => {
+    forgetOldCopy();
+    return emptyData();
+  });
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [batch, setBatch] = useState<string[]>([]);
@@ -272,10 +267,6 @@ const App = () => {
   const [page, setPage] = useState(1);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    persist(data);
-  }, [data]);
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -471,7 +462,7 @@ const App = () => {
   };
 
   const resetAll = () => {
-    if (window.confirm("Clear everything this page remembers (whitelist, unfollowed log, loaded lists)? Your saved .xlsx files are not touched.")) {
+    if (window.confirm("Clear everything loaded in this page (whitelist, unfollowed log, lists)? Your saved .xlsx files are not touched.")) {
       setData(emptyData());
       setDirty(false);
       setNotice({ kind: "ok", text: "Cleared." });
