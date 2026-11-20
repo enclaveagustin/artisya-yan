@@ -1,0 +1,47 @@
+{
+  "name": "artisya-yan",
+  "version": "4.0.0",
+  "description": "Artisya Yan?! - an offline follow-back checker for Instagram that works from your own data export and keeps your whitelist in a spreadsheet.",
+  "author": "Niño D. Agustin",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "webpack-build": "webpack --mode production",
+    "build-dev": "npm run build && webpack serve --mode development",
+    "build-prod": "npm run build && webpack serve --mode production",
+    "update-index": "node scripts/update-index.js docs/scanner.html dist/dist.js",
+    "build": "npm run webpack-build && npm run update-index && npm run build-offline",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src --ext .ts,.tsx",
+    "test": "tsc -p tsconfig.test.json && node --test test-dist/tests/scan-resilience.test.js test-dist/tests/whitelist-compat.test.js test-dist/tests/offline.test.js",
+    "verify": "npm run typecheck && npm run lint && npm test && npm audit --omit=dev",
+    "build-offline": "webpack --config webpack.offline.config.js --mode production && node scripts/build-offline-html.js",
+    "template": "tsc -p tsconfig.test.json && node scripts/make-template.js",
+    "samples": "tsc -p tsconfig.test.json && node scripts/make-samples.js",
+    "profile": "node scripts/embed-profile.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@typescript-eslint/eslint-plugin": "^8.73.0",
+    "@typescript-eslint/parser": "^8.73.0",
+    "css-loader": "^6.11.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "sass": "^1.83.4",
+    "sass-loader": "^13.3.3",
+    "style-loader": "^3.3.4",
+    "ts-loader": "^9.6.2",
+    "typescript": "^5.7.3",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^6.1.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "preact": "^10.25.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

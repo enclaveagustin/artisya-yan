@@ -1,0 +1,21 @@
+node_modules/
+.vscode/
+dist/
+.idea/
+.DS_Store
+bun.lockb
+test-dist/
+offline-dist/
+# Personal data: never commit your Instagram export or your real workbook
+private/
+followers_*.json
+following.json
+followers_*.html
+following.html
+instagram-*/
+/ig_whitelist.xlsx
+
+# ...but the made-up sample files in samples/ ARE meant to be committed
+!samples/
+!samples/export/
+!samples/export/*.html

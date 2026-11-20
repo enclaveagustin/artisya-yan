@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "commonjs",
+        "outDir": "test-dist",
+        "rootDir": ".",
+        "noEmit": false,
+        "noEmitOnError": true,
+        "types": ["node"],
+        "lib": ["dom", "es2020"],
+        "target": "es2020"
+    },
+    "include": ["src/utils/**/*", "src/model/**/*", "src/constants/**/*", "src/offline/**/*.ts", "tests/**/*"]
+}

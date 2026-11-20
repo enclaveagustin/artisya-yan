@@ -1,0 +1,232 @@
+import { UserNode } from "../model/user";
+import { Timings } from "../model/timings";
+import { WHITELISTED_RESULTS_STORAGE_KEY, TIMINGS_STORAGE_KEY, LAST_SCAN_RESULTS_STORAGE_KEY, LAST_SCAN_TIMESTAMP_STORAGE_KEY, BLOCKED_UNTIL_STORAGE_KEY, CACHE_MAX_AGE_MS } from "../constants/constants";
+import { getViewerId } from "./utils";
+import { clampTimings, lowerUsername, sanitizeUserList } from "./validation";
+
+/**
+ * Export whitelist to a JSON file
+ */
+export const exportWhitelist = (whitelistedUsers: readonly UserNode[]): void => {
+  if (whitelistedUsers.length === 0) {
+    alert("No users in whitelist to export");
+    return;
+  }
+
+  const dataStr = JSON.stringify(whitelistedUsers, null, 2);
+  const dataBlob = new Blob([dataStr], { type: "application/json" });
+  const url = URL.createObjectURL(dataBlob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `instagram-whitelist-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  // Revoking immediately can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};
+
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Import whitelist from a JSON file
+ */
+export const importWhitelist = (
+  file: File,
+  onSuccess: (users: readonly UserNode[]) => void,
+  onError: (message: string) => void
+): void => {
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    try {
+      const content = e.target?.result;
+      if (typeof content !== "string" || content.length > MAX_IMPORT_BYTES) {
+        onError("Invalid file: too large to be a whitelist export");
+        return;
+      }
+      const parsed: unknown = JSON.parse(content);
+
+      if (!Array.isArray(parsed)) {
+        onError("Invalid file format: Expected an array of users");
+        return;
+      }
+
+      // Rebuild every entry from known-safe fields only. Anything that is not a
+      // plausible account (bad id/username, non-https avatar) is dropped, so a
+      // crafted file cannot inject URLs, paths or markup into the app.
+      const importedUsers = sanitizeUserList(parsed, true);
+      if (importedUsers.length === 0 && parsed.length > 0) {
+        onError("Invalid file format: no valid users (each needs a valid id and username)");
+        return;
+      }
+
+      onSuccess(importedUsers);
+    } catch (error) {
+      onError(`Failed to parse JSON file: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  };
+
+  reader.onerror = () => {
+    onError("Failed to read file");
+  };
+
+  reader.readAsText(file);
+};
+
+/**
+ * Clear all whitelist data
+ */
+export const clearWhitelist = (): void => {
+  if (!confirm("Are you sure you want to clear the entire whitelist? This action cannot be undone.")) {
+    return;
+  }
+
+  localStorage.removeItem(WHITELISTED_RESULTS_STORAGE_KEY);
+};
+
+/**
+ * Load whitelist from localStorage
+ */
+export const loadWhitelist = (): readonly UserNode[] => {
+  try {
+    const whitelistedResultsFromStorage = localStorage.getItem(WHITELISTED_RESULTS_STORAGE_KEY);
+    if (!whitelistedResultsFromStorage) {
+      return [];
+    }
+    return sanitizeUserList(JSON.parse(whitelistedResultsFromStorage), true);
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Save whitelist to localStorage
+ */
+export const saveWhitelist = (whitelistedUsers: readonly UserNode[]): void => {
+  try {
+    localStorage.setItem(WHITELISTED_RESULTS_STORAGE_KEY, JSON.stringify(whitelistedUsers));
+  } catch (e) {
+    console.warn("Could not save whitelist to storage:", e);
+  }
+};
+
+/**
+ * Merge imported whitelist with existing whitelist (avoiding duplicates)
+ */
+export const mergeWhitelists = (
+  existing: readonly UserNode[],
+  imported: readonly UserNode[]
+): readonly UserNode[] => {
+  const existingIds = new Set(existing.map(user => user.id));
+  const existingUsernames = new Set(existing.map(lowerUsername));
+  const uniqueImported = imported.filter(user => !existingIds.has(user.id) && !existingUsernames.has(lowerUsername(user)));
+  return [...existing, ...uniqueImported];
+};
+
+const isTimings = (value: unknown): value is Timings => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((timing) => typeof timing === "number");
+};
+
+/**
+ * Load timings from localStorage
+ */
+export const loadTimings = (): Timings | null => {
+  try {
+    const timingsFromStorage = localStorage.getItem(TIMINGS_STORAGE_KEY);
+
+    if (timingsFromStorage === null) {
+      return null;
+    }
+
+    const parsedTimings: unknown = JSON.parse(timingsFromStorage);
+    return isTimings(parsedTimings) ? clampTimings(parsedTimings) : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Save timings to localStorage
+ */
+export const saveTimings = (timings: Timings): void => {
+  try {
+    localStorage.setItem(TIMINGS_STORAGE_KEY, JSON.stringify(clampTimings(timings)));
+  } catch (e) {
+    console.warn("Could not save timings to storage:", e);
+  }
+};
+
+/**
+ * Cache completed scan results locally for instant recall.
+ * Scoped to the logged-in account: one shared key would show the previous
+ * account's results after switching accounts.
+ */
+const cacheKeySuffix = (accountId?: string | null): string => `-${accountId ?? getViewerId() ?? ""}`;
+
+/**
+ * `accountId` is the viewer captured when the scan started. Passing it keeps a
+ * scan that outlives an account switch under the account it came from, instead
+ * of overwriting the new account's cache.
+ */
+export const saveCachedScanResults = (results: readonly UserNode[], accountId?: string | null): void => {
+  try {
+    const suffix = cacheKeySuffix(accountId);
+    localStorage.setItem(LAST_SCAN_RESULTS_STORAGE_KEY + suffix, JSON.stringify(results));
+    localStorage.setItem(LAST_SCAN_TIMESTAMP_STORAGE_KEY + suffix, String(Date.now()));
+  } catch (e) {
+    console.warn("Could not cache scan results:", e);
+  }
+};
+
+/**
+ * Load cached scan results from localStorage
+ */
+export const loadCachedScanResults = (): { results: readonly UserNode[]; timestamp: number } | null => {
+  try {
+    const suffix = cacheKeySuffix();
+    const raw = localStorage.getItem(LAST_SCAN_RESULTS_STORAGE_KEY + suffix);
+    const time = localStorage.getItem(LAST_SCAN_TIMESTAMP_STORAGE_KEY + suffix);
+    if (!raw || !time) {
+      return null;
+    }
+    const timestamp = Number(time);
+    // People follow back over time; unfollowing from an old list would remove
+    // accounts that now follow you, so stale caches are not offered.
+    if (!Number.isFinite(timestamp) || Date.now() - timestamp > CACHE_MAX_AGE_MS) {
+      return null;
+    }
+    const results = sanitizeUserList(JSON.parse(raw)).filter(user => !user.follows_viewer);
+    if (results.length === 0) {
+      return null;
+    }
+    return { results, timestamp };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Timestamp (ms) until which scans and unfollows must not start.
+ */
+export const getBlockedUntil = (): number => {
+  try {
+    return Number(localStorage.getItem(BLOCKED_UNTIL_STORAGE_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+};
+
+export const setBlockedUntil = (until: number): void => {
+  try {
+    localStorage.setItem(BLOCKED_UNTIL_STORAGE_KEY, String(until));
+  } catch (e) {
+    console.warn("Could not persist the cooldown:", e);
+  }
+};

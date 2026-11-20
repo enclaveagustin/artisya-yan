@@ -1,0 +1,64 @@
+// Design tokens.
+// Identity: warm "paper & ink" with chunky outlines and offset shadows, a violet
+// primary and a mint secondary. Light by default; dark follows the system, and
+// the toolbar toggle can force either (html[data-iu-theme]).
+
+@mixin dark-tokens {
+  --bg: #0e0d16;
+  --surface: #171523;
+  --surface-2: #211e31;
+  --ink: #f3f0ff;
+  --muted: #a29cb8;
+  --line: #3a3556;
+  --accent: #8b73ff;
+  --accent-ink: #0e0d16;
+  --accent-soft: rgba(139, 115, 255, 0.16);
+  --mint: #3ddbb5;
+  --mint-soft: rgba(61, 219, 181, 0.14);
+  --danger: #ff6b76;
+  --danger-ink: #1a0a0c;
+  --danger-soft: rgba(255, 107, 118, 0.14);
+  --warn: #ffbf47;
+  --warn-soft: rgba(255, 191, 71, 0.14);
+  --shadow-color: rgba(139, 115, 255, 0.45);
+  --scrim: rgba(5, 4, 12, 0.7);
+}
+
+:root {
+  --bg: #f3efe6;
+  --surface: #fffdf8;
+  --surface-2: #ebe6d8;
+  --ink: #14121f;
+  --muted: #625d72;
+  --line: #14121f;
+  --accent: #5b3df5;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(91, 61, 245, 0.11);
+  --mint: #0b8f73;
+  --mint-soft: rgba(11, 143, 115, 0.13);
+  --danger: #d12a38;
+  --danger-ink: #ffffff;
+  --danger-soft: rgba(209, 42, 56, 0.1);
+  --warn: #8a5300;
+  --warn-soft: rgba(245, 165, 36, 0.2);
+  --shadow-color: #14121f;
+  --scrim: rgba(20, 18, 31, 0.55);
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --header-h: 4.25rem;
+  --shadow: 4px 4px 0 var(--shadow-color);
+  --shadow-sm: 2px 2px 0 var(--shadow-color);
+  --font: ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-iu-theme="light"]) {
+    @include dark-tokens;
+  }
+}
+
+:root[data-iu-theme="dark"] {
+  @include dark-tokens;
+}
