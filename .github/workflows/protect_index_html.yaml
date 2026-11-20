@@ -1,0 +1,26 @@
+name: Protect generated pages
+
+on:
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  block-generated-pages:
+    name: block-generated-pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # docs/index.html (the offline checker), docs/offline.html (its redirect) and docs/scanner.html
+      # (the online scanner's bookmarklet bundle) are generated from src/. A hand-edited copy in a PR
+      # is a way to smuggle in code, so changes to them are rejected; the build regenerates them.
+      - name: Fail if a generated page was modified
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eqx 'docs/(index|offline|scanner)\.html'; then
+            echo "::error::docs/index.html, docs/offline.html and docs/scanner.html must not be modified in a PR."
+            exit 1
+          fi
