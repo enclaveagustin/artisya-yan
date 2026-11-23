@@ -716,3 +716,65 @@ test("the follower history survives the browser copy and junk is dropped", () =>
   });
   assert.deepEqual(junk.snapshots, [rec("ok_user", "2026-01-01", "2026-02-01")]);
 });
+
+// --- Instagram export ZIP ----------------------------------------------------
+
+import { dayFromZipName, isZipName, readExportZip } from "../src/offline/export-zip";
+
+const zipOf = (entries: Record<string, string>): Uint8Array => {
+  const files: Record<string, Uint8Array> = {};
+  for (const [name, text] of Object.entries(entries)) {
+    files[name] = strToU8(text);
+  }
+  return zipSync(files);
+};
+
+test("zip: picks only following, followers and recently unfollowed, at any depth", () => {
+  const folder = "connections/followers_and_following/";
+  const zip = zipOf({
+    [`${folder}following.html`]: "<a href=\"https://www.instagram.com/a\">a</a>",
+    [`${folder}followers_1.html`]: "f1",
+    [`${folder}followers_2.html`]: "f2",
+    [`${folder}recently_unfollowed_profiles.html`]: "r",
+    [`${folder}blocked_profiles.html`]: "no",
+    [`${folder}pending_follow_requests.html`]: "no",
+    [`${folder}close_friends.html`]: "no",
+    "start_here.html": "no",
+    "messages/inbox/following.html": "no",
+    [`__MACOSX/${folder}followers_1.html`]: "no",
+  });
+  const result = readExportZip(zip, "instagram-user-2026-11-23-AbC.zip");
+  assert.deepEqual(result.files.map(f => f.name), ["followers_1.html", "followers_2.html", "following.html", "recently_unfollowed_profiles.html"]);
+  assert.equal(result.day, "2026-11-23");
+  assert.equal(result.files[0].text, "f1");
+});
+
+test("zip: works with the older layout (a top folder) and JSON files", () => {
+  const zip = zipOf({
+    "instagram-user-2025-01-02/followers_and_following/followers_1.json": "[]",
+    "instagram-user-2025-01-02/followers_and_following/following.json": "{}",
+  });
+  assert.deepEqual(readExportZip(zip).files.map(f => f.name), ["followers_1.json", "following.json"]);
+});
+
+test("zip: no list inside gives an empty result, not an error", () => {
+  assert.equal(readExportZip(zipOf({ "start_here.html": "x" })).files.length, 0);
+});
+
+test("zip: a file that is not a zip is rejected with a clear message", () => {
+  assert.throws(() => readExportZip(strToU8("not a zip at all")), /not a valid ZIP/);
+});
+
+test("zip: name helpers", () => {
+  assert.equal(isZipName("Export.ZIP"), true);
+  assert.equal(isZipName("following.html"), false);
+  assert.equal(dayFromZipName("instagram-seasonsofninyo-2026-11-23-FIGdi2Oo.zip"), "2026-11-23");
+  assert.equal(dayFromZipName("export.zip"), "");
+});
+
+test("zip: the parsed lists match the loose files", () => {
+  const html = "<html><body><table><tr><td>Name</td><td>Username</td></tr></table><a href=\"https://www.instagram.com/alice\">alice</a><a href=\"https://www.instagram.com/bob\">bob</a></body></html>";
+  const direct = parseInstagramExport(html, "following.html");
+  const viaZip = readExportZip(zipOf({ "connections/followers_and_following/following.html": html })).files[0];
+  assert.deepEqual(parseInstagramExport(viaZip.text, viaZip.name).usernames, direct.usernames);
+});

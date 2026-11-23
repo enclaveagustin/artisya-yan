@@ -3,6 +3,7 @@
 //   samples/export/following.html              }
 //   samples/export/followers_1.html            } same layout as Instagram's "Download your information"
 //   samples/export/recently_unfollowed_profiles.html
+//   samples/instagram-sample-export-2026-11-20.zip   the same three files zipped like Instagram's download (drop it on the page)
 // Every account is made up (*_demo); nothing here comes from a real profile.
 // Run with: npm run samples
 const fs = require('fs');
@@ -89,5 +90,13 @@ const unfollowedBody = unfollowedNames.map((name, i) =>
 fs.writeFileSync(path.join(out, 'export', 'followers_1.html'), page('Followers', '', followersBody));
 fs.writeFileSync(path.join(out, 'export', 'following.html'), page('Following', '<p>Profiles you choose to see content from</p>', followingBody));
 fs.writeFileSync(path.join(out, 'export', 'recently_unfollowed_profiles.html'), page('Recently unfollowed profiles', '<p>Profiles that you have recently stopped following</p>', unfollowedBody));
+
+const { zipSync } = require('fflate');
+const zipFolder = 'connections/followers_and_following/';
+const zipEntries = {};
+for (const name of ['following.html', 'followers_1.html', 'recently_unfollowed_profiles.html']) {
+  zipEntries[zipFolder + name] = new Uint8Array(fs.readFileSync(path.join(out, 'export', name)));
+}
+fs.writeFileSync(path.join(out, `instagram-sample-export-${EXPORT_DAY}.zip`), Buffer.from(zipSync(zipEntries)));
 
 console.log(`samples written to ${path.relative(process.cwd(), out)}: ${following.length} following, ${followers.length} followers, ${data.accounts.length} workbook accounts`);

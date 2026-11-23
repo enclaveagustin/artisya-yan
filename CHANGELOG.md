@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.1.0] - 2026-11-23
+
+### Added
+- **Drop Instagram's ZIP as it is.** The page opens the "Download your information" ZIP itself and picks out following, followers
+  and recently unfollowed (HTML or JSON); nothing else in the ZIP is decompressed. Needs no unzipping or renaming. The export
+  day is read from the HTML or, failing that, from the ZIP's file name. ZIPs over 1 GB are refused with advice.
+- `samples/instagram-sample-export-2026-11-20.zip` to try it.
+
+### Changed
+- The page no longer keeps your lists in the browser between visits: it starts empty and the workbook is the only copy.
+  The old saved copy is removed on load.
+
 ## [5.0.0] - 2026-11-21
 
 ### Changed

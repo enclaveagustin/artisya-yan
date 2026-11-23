@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { render } from "react-dom";
 import "./offline.scss";
 
+import { isZipName, MAX_ZIP_BYTES, readExportZip } from "./export-zip";
 import { parseInstagramExport } from "./instagram-export";
 import { PROFILE_IMAGE } from "./profile-image";
 
@@ -374,14 +375,45 @@ const App = () => {
       ? analysis.missing
       : analysis.buckets[id];
 
-  const handleFiles = async (files: readonly File[]) => {
+  const handleFiles = async (picked: readonly File[]) => {
     const messages: string[] = [];
     let failed = false;
+    // A ZIP straight from Instagram is opened here and becomes the same list files you could have picked one by one.
+    interface Item {
+      readonly name: string;
+      readonly lastModified: number;
+      readonly file?: File;
+      readonly text?: string;
+      readonly day?: string;
+    }
+    const files: Item[] = [];
+    for (const file of picked) {
+      if (!isZipName(file.name)) {
+        files.push({ name: file.name, lastModified: file.lastModified, file });
+        continue;
+      }
+      try {
+        if (file.size > MAX_ZIP_BYTES) {
+          throw new Error("This ZIP is too big to open here. Download an export with only \"Followers and following\" selected (it is a few MB), or unzip it and pick the files inside.");
+        }
+        const zip = readExportZip(new Uint8Array(await file.arrayBuffer()), file.name);
+        if (zip.files.length === 0) {
+          throw new Error("No followers or following list found inside. Request the export in HTML or JSON format with \"Followers and following\" selected.");
+        }
+        messages.push(`${file.name}: opened, found ${zip.files.map(entry => entry.name).join(", ")}`);
+        for (const entry of zip.files) {
+          files.push({ name: entry.name, lastModified: file.lastModified, text: entry.text, day: zip.day });
+        }
+      } catch (e) {
+        failed = true;
+        messages.push(`${file.name}: ${e instanceof Error ? e.message : "could not be read"}`);
+      }
+    }
     for (const file of files) {
       let exportDay = "";
       try {
-        if (/\.xlsx$/i.test(file.name)) {
-          const result = readWorkbook(new Uint8Array(await file.arrayBuffer()));
+        if (/\.xlsx$/i.test(file.name) && file.file !== undefined) {
+          const result = readWorkbook(new Uint8Array(await file.file.arrayBuffer()));
           setData(prev => ({
             ...prev,
             accounts: result.accounts,
@@ -405,12 +437,12 @@ const App = () => {
               (result.snapshots.length > 0 ? `; follower history of ${result.snapshots.length} accounts` : ""),
           );
         } else if (/\.(json|html?)$/i.test(file.name)) {
-          const result = parseInstagramExport(await file.text(), file.name);
+          const result = parseInstagramExport(file.text ?? (await file.file?.text()) ?? "", file.name);
           if (result.kind === "following") {
             setData(prev => ({ ...prev, following: { name: file.name, usernames: result.usernames } }));
           } else if (result.kind === "followers") {
             // The HTML export says when it was generated; for a file that does not, its last-modified day is the best guess.
-            exportDay = result.generatedOn ?? new Date(file.lastModified).toISOString().slice(0, 10);
+            exportDay = result.generatedOn ?? ((file.day ?? "") !== "" ? file.day ?? "" : new Date(file.lastModified).toISOString().slice(0, 10));
             const day = exportDay;
             setData(prev => addFollowerFile(prev, { name: file.name, usernames: result.usernames, generatedOn: day }));
           } else if (result.kind === "recentlyUnfollowed") {
@@ -427,7 +459,7 @@ const App = () => {
               (result.skipped > 0 ? ` (${result.skipped} entries skipped)` : ""),
           );
         } else {
-          throw new Error("Only .html / .json (Instagram export) and .xlsx (workbook) files are supported.");
+          throw new Error("Only the Instagram export (.zip, or its .html / .json files) and .xlsx (workbook) files are supported.");
         }
       } catch (e) {
         failed = true;
@@ -512,10 +544,11 @@ const App = () => {
             You can select several at once.
           </p>
           <ul className="needs">
-            <li><b>following.html</b> and <b>followers_1.html</b> (+ followers_2.html …) from Instagram's "Download your information". The JSON versions work too. Add <b>recently_unfollowed_profiles.html</b> as well to tell deleted accounts from ones you unfollowed.</li>
+            <li>The <b>.zip</b> from Instagram's "Download your information", as it is. The page finds your following, followers and recently unfollowed lists inside it. No need to unzip anything.</li>
+            <li>Or the files from inside it: <b>following.html</b>, <b>followers_1.html</b> (+ followers_2.html …) and <b>recently_unfollowed_profiles.html</b> (tells deleted accounts from ones you unfollowed). The JSON versions work too.</li>
             <li><b>ig_whitelist.xlsx</b> <em>(optional)</em>: your saved workbook with the white_list and unfollowed tabs.</li>
           </ul>
-          <input ref={fileInput} type="file" accept=".html,.htm,.json,.xlsx" multiple hidden onChange={onPick} />
+          <input ref={fileInput} type="file" accept=".zip,.html,.htm,.json,.xlsx" multiple hidden onChange={onPick} />
         </div>
         <div className="loaded">
           <h3>Loaded</h3>
